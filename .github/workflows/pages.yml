@@ -119,65 +119,22 @@ jobs:
           ref: master
           path: lovejs
 
-      - name: Build the GitHub Pages site with the real Kristal game
+      - name: Install LÖVE.js build dependencies
+        working-directory: lovejs
+        run: npm ci
+
+      - name: Build the GitHub Pages site with the official LÖVE.js packager
         run: |
           set -euxo pipefail
           rm -rf site
-          mkdir -p site
-          cp lovejs/src/compat/love.js site/love.js
-          cp lovejs/src/compat/love.wasm site/love.wasm
-          cp -a lovejs/src/compat/theme site/theme
-
-          python3 - <<'PY'
-          import json
-          import uuid
-          from pathlib import Path
-
-          game_path = Path("roaringknight.love")
-          size = game_path.stat().st_size
-
-          metadata = {
-              "package_uuid": str(uuid.uuid4()),
-              "remote_package_size": size,
-              "files": [{
-                  "filename": "/game.love",
-                  "crunched": 0,
-                  "start": 0,
-                  "end": size,
-                  "audio": False,
-              }],
-          }
-
-          template = Path("lovejs/src/game.js").read_text()
-
-          # GitHub Pages can handle arbitrary static files, but using a
-          # conventional binary extension avoids any server/content-type
-          # handling differences for Emscripten's data package.
-          template = template.replace("game.data", "game.bin")
-
-          game_js = template.replace("{{{create_file_paths}}}", "")
-          game_js = game_js.replace(
-              "{{{metadata}}}",
-              json.dumps(metadata, separators=(",", ":"))
-          )
-          Path("site/game.js").write_text(game_js)
-
-          index = Path("lovejs/src/compat/index.html").read_text()
-          index = index.replace("{{title}}", "Roaring Knight Fight")
-          index = index.replace("{{{arguments}}}", json.dumps(["./game.love"]))
-          index = index.replace("{{memory}}", "67108864")
-          Path("site/index.html").write_text(index)
-
-          game_path.replace("site/game.bin")
-          PY
-
+          node lovejs/index.js -c -m 67108864 -t "Roaring Knight Fight" roaringknight.love site
           test -s site/index.html
           test -s site/game.js
-          test -s site/game.bin
+          test -s site/game.data
           test -s site/love.js
           test -s site/love.wasm
-          test "$(wc -c < site/game.bin)" -gt 1000000
-          grep -q "REMOTE_PACKAGE_BASE = 'game.bin'" site/game.js
+          test "$(wc -c < site/game.data)" -gt 1000000
+          echo "Packaged game.data size: $(wc -c < site/game.data) bytes"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
