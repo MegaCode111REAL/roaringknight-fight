@@ -136,6 +136,44 @@ jobs:
           test "$(wc -c < site/game.data)" -gt 1000000
           echo "Packaged game.data size: $(wc -c < site/game.data) bytes"
           echo "Using 256 MiB WebAssembly heap for Kristal startup."
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("site/index.html")
+          s = p.read_text()
+          old = "printErr: console.error.bind(console),"
+          new = """printErr: (function() {
+              return function(message) {
+                  console.error(message);
+                  var box = document.getElementById('runtimeError');
+                  if (box) {
+                      box.style.display = 'block';
+                      box.textContent += String(message) + "\\n";
+                  }
+              };
+          })(),"""
+          if old not in s:
+              raise SystemExit("love.js printErr hook not found")
+          s = s.replace(old, new, 1)
+          s = s.replace(
+              '<div>\n<h1>{{title}}</h1>',
+              '<div>\n<h1>{{title}}</h1>\n<div id="runtimeError" style="display:none;position:fixed;left:10px;right:10px;bottom:10px;max-height:45vh;overflow:auto;background:#111;color:#ff8080;border:2px solid #f44;padding:12px;text-align:left;white-space:pre-wrap;font:14px monospace;z-index:99999"></div>',
+              1
+          )
+          old_error = "window.onerror = function(event) {"
+          new_error = """window.onerror = function(event, source, lineno, colno, error) {
+              var box = document.getElementById('runtimeError');
+              if (box) {
+                  box.style.display = 'block';
+                  box.textContent += "JS ERROR: " + String(event) + "\\n";
+                  if (source) box.textContent += source + ":" + lineno + ":" + colno + "\\n";
+                  if (error && error.stack) box.textContent += error.stack + "\\n";
+              }
+"""
+          if old_error not in s:
+              raise SystemExit("love.js window.onerror hook not found")
+          s = s.replace(old_error, new_error, 1)
+          p.write_text(s)
+          PY
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
