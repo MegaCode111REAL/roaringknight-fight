@@ -83,6 +83,139 @@ jobs:
           path.write_text(text.replace(old_https, new_https, 1))
           PY
 
+          # love.js compatibility mode cannot use native LÖVE threads.
+          # Convert Kristal's exact asset-loader implementation into a synchronous module.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          kristal = Path("kristal")
+          loadthread = kristal / "src/engine/loadthread.lua"
+          source = loadthread.read_text()
+          marker = "-- Channels for thread communications"
+          if marker not in source:
+              raise SystemExit("Kristal loadthread structure changed")
+          prefix = source.split(marker, 1)[0]
+          webloader = prefix + r'''
+          local function load_assets(baseDir, loader, paths)
+              resetData()
+              local requested = paths or { "" }
+              if type(requested) == "string" then
+                  requested = { requested }
+              end
+
+              if loader == "all" then
+                  for name, _ in pairs(loaders) do
+                      if name ~= "mods" then
+                          for _, path in ipairs(requested) do
+                              loadPath(baseDir, name, path)
+                          end
+                      end
+                  end
+              else
+                  for _, path in ipairs(requested) do
+                      loadPath(baseDir, loader, path)
+                  end
+              end
+
+              return data
+          end
+
+          return load_assets
+          '''
+          (kristal / "src/engine/webloader.lua").write_text(webloader)
+
+          path = kristal / "main.lua"
+          text = path.read_text()
+          old = '''    -- start load thread
+              Kristal.Loader.in_channel = love.thread.getChannel("load_in")
+              Kristal.Loader.out_channel = love.thread.getChannel("load_out")
+
+              Kristal.Loader.thread = love.thread.newThread("src/engine/loadthread.lua")
+              Kristal.Loader.thread:start()
+
+              -- start https thread'''
+          if old not in text:
+              raise SystemExit("Kristal load-thread bootstrap not found")
+          new_text = '''    -- Browser builds cannot use native LÖVE threads.
+              Kristal.Loader.in_channel = nil
+              Kristal.Loader.out_channel = nil
+              Kristal.Loader.thread = nil
+
+              -- start https thread'''
+          text = text.replace(old, new_text, 1)
+          text = text.replace('require("src.engine.vendcust")\n', 'require("src.engine.vendcust")\nWEB_BUILD = true\n', 1)
+          path.write_text(text)
+
+          path = kristal / "src/kristal.lua"
+          text = path.read_text()
+          old = '''function Kristal.loadAssets(dir, loader, paths, after)
+              Kristal.Loader.message = ""
+              Kristal.Overlay.setLoading(true)
+              Kristal.Loader.waiting = Kristal.Loader.waiting + 1
+
+              if after then
+                  Kristal.Loader.end_funcs[Kristal.Loader.next_key] = after
+              end
+
+              if Kristal.Config["verboseLoader"] then
+                  Kristal.Loader.in_channel:push("verbose")
+              end
+
+              Kristal.Loader.in_channel:push({
+                  key = Kristal.Loader.next_key,
+                  dir = dir,
+                  loader = loader,
+                  paths = paths
+              })
+              Kristal.Loader.next_key = Kristal.Loader.next_key + 1
+          end'''
+          replacement2 = '''function Kristal.loadAssets(dir, loader, paths, after)
+              Kristal.Loader.message = ""
+              Kristal.Overlay.setLoading(true)
+
+              if WEB_BUILD then
+                  local web_loader = require("src.engine.webloader")
+                  local data = web_loader(dir, loader, paths)
+                  Assets.loadData(data.assets)
+                  Kristal.Mods.loadData(data.mods, data.failed_mods)
+                  if after then
+                      after()
+                  end
+                  Kristal.Overlay.setLoading(false)
+                  Kristal.Loader.waiting = 0
+                  return
+              end
+
+              Kristal.Loader.waiting = Kristal.Loader.waiting + 1
+
+              if after then
+                  Kristal.Loader.end_funcs[Kristal.Loader.next_key] = after
+              end
+
+              if Kristal.Config["verboseLoader"] then
+                  Kristal.Loader.in_channel:push("verbose")
+              end
+
+              Kristal.Loader.in_channel:push({
+                  key = Kristal.Loader.next_key,
+                  dir = dir,
+                  loader = loader,
+                  paths = paths
+              })
+              Kristal.Loader.next_key = Kristal.Loader.next_key + 1
+          end'''
+          if old not in text:
+              raise SystemExit("Kristal.loadAssets function changed")
+          path.write_text(text.replace(old, replacement2, 1))
+
+          path = kristal / "src/engine/music.lua"
+          text = path.read_text()
+          old = 'self.source = love.audio.newSource(path, "stream")'
+          if old not in text:
+              raise SystemExit("Kristal music source line not found")
+          path.write_text(text.replace(old, 'self.source = love.audio.newSource(path, WEB_BUILD and "static" or "stream")', 1))
+          PY
+
       - name: Package the real Kristal engine and project
         run: |
           cd kristal
