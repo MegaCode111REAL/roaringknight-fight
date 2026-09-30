@@ -149,6 +149,12 @@ jobs:
           }
 
           template = Path("lovejs/src/game.js").read_text()
+
+          # GitHub Pages can handle arbitrary static files, but using a
+          # conventional binary extension avoids any server/content-type
+          # handling differences for Emscripten's data package.
+          template = template.replace("game.data", "game.bin")
+
           game_js = template.replace("{{{create_file_paths}}}", "")
           game_js = game_js.replace(
               "{{{metadata}}}",
@@ -162,14 +168,16 @@ jobs:
           index = index.replace("{{memory}}", "67108864")
           Path("site/index.html").write_text(index)
 
-          game_path.replace("site/game.data")
+          game_path.replace("site/game.bin")
           PY
 
           test -s site/index.html
           test -s site/game.js
-          test -s site/game.data
+          test -s site/game.bin
           test -s site/love.js
           test -s site/love.wasm
+          test "$(wc -c < site/game.bin)" -gt 1000000
+          grep -q "REMOTE_PACKAGE_BASE = 'game.bin'" site/game.js
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
