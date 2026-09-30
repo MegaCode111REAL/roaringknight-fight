@@ -127,7 +127,7 @@ jobs:
         run: |
           set -euxo pipefail
           rm -rf site
-          node lovejs/index.js -c -m 67108864 -t "Roaring Knight Fight" roaringknight.love site
+          node lovejs/index.js -c -m 268435456 -t "Roaring Knight Fight" roaringknight.love site
           test -s site/index.html
           test -s site/game.js
           test -s site/game.data
@@ -135,6 +135,7 @@ jobs:
           test -s site/love.wasm
           test "$(wc -c < site/game.data)" -gt 1000000
           echo "Packaged game.data size: $(wc -c < site/game.data) bytes"
+          echo "Using 256 MiB WebAssembly heap for Kristal startup."
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
