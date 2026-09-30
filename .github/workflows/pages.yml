@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KristalTeam/Kristal
-          ref: main
+          ref: a2023e571497b86f76827b44872c18723d303f99
           path: kristal
 
       - name: Install build tools
