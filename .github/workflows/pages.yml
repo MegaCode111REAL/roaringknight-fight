@@ -62,7 +62,7 @@ jobs:
       - name: Export the real Kristal build for the browser
         run: |
           rm -rf site
-          npx love.js roaringknight.love site -c -t "Roaring Knight Fight"
+          npx love.js roaringknight.love site -c -m 67108864 -t "Roaring Knight Fight"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
