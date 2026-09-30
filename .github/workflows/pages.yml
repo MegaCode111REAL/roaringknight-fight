@@ -33,13 +33,6 @@ jobs:
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y zip
 
-      - name: Checkout LÖVE.js 11.5 player
-        uses: actions/checkout@v4
-        with:
-          repository: 2dengine/love.js
-          ref: main
-          path: lovejs
-
       - name: Add the real Roaring Knight project to Kristal
         run: |
           rm -rf kristal/mods/*
@@ -119,32 +112,19 @@ jobs:
           zip -9 -r ../roaringknight.love . -x '.git/*'
           cd ..
 
-      - name: Build the GitHub Pages site with LÖVE 11.5
+      - name: Install LÖVE.js 11.5 compatibility builder
+        run: npm install --global github:Davidobot/love.js
+
+      - name: Build the GitHub Pages site with LÖVE 11.5 compatibility mode
         run: |
           rm -rf site
-          mkdir -p site
-          cp lovejs/player.js site/player.js
-          cp lovejs/style.css site/style.css
-          cp -a lovejs/11.5 site/11.5
-          cp -a lovejs/lua site/lua
-          cp roaringknight.love site/roaringknight.love
-          cat > site/index.html <<'HTML'
-          <!doctype html>
-          <html lang="en">
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width,initial-scale=1">
-            <title>Roaring Knight Fight</title>
-            <style>
-              html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
-              canvas { display: block; width: 100vw; height: 100vh; }
-            </style>
-          </head>
-          <body>
-            <script src="player.js?g=roaringknight.love&v=11.5"></script>
-          </body>
-          </html>
-          HTML
+          npx love.js roaringknight.love site -c -m 67108864 -t "Roaring Knight Fight"
+
+          test -f site/index.html
+          test -f site/love.js
+          test -f site/love.wasm
+          test -f site/roaringknight.love
+
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
