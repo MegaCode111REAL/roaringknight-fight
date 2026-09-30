@@ -50,14 +50,8 @@ jobs:
 
       - name: Configure Kristal for the real project
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path("kristal/src/engine/vendcust.lua")
-          s = p.read_text()
-          s = s.replace('TARGET_MOD = nil', 'TARGET_MOD = "roaringknight_proj"')
-          s = s.replace('AUTO_MOD_START = false', 'AUTO_MOD_START = true')
-          p.write_text(s)
-          PY
+          sed -i 's/^TARGET_MOD = nil$/TARGET_MOD = "roaringknight_proj"/' kristal/src/engine/vendcust.lua
+          sed -i 's/^AUTO_MOD_START = false$/AUTO_MOD_START = true/' kristal/src/engine/vendcust.lua
 
       - name: Package the real Kristal engine and project
         run: |
