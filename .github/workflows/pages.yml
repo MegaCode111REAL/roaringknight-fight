@@ -52,16 +52,12 @@ jobs:
           text = path.read_text()
 
           old_discord = 'DiscordRPC = require("src.lib.discordrpc")'
-          new_discord = '''local discord_rpc_ok, discord_rpc_module = pcall(require, "src.lib.discordrpc")
-          if discord_rpc_ok then
-              DiscordRPC = discord_rpc_module
-          else
-              DiscordRPC = setmetatable({}, {
-                  __index = function()
-                      return function() end
-                  end
-              })
-          end'''
+          new_discord = '''-- Browser build: Discord RPC uses LuaJIT FFI and cannot run in love.js.
+          DiscordRPC = setmetatable({}, {
+              __index = function()
+                  return function() end
+              end
+          })'''
 
           if old_discord not in text:
               raise SystemExit("Could not find DiscordRPC require in Kristal main.lua")
@@ -78,28 +74,9 @@ jobs:
               https = require("src.lib.https")
           end'''
 
-          new_https = '''local major, _, _, _ = love.getVersion()
-
-          -- love.js runs LÖVE 11.5 without LuaJIT, so native LuaJIT FFI
-          -- libraries such as Kristal's desktop HTTPS module cannot load.
-          -- The Roaring Knight project does not require outbound HTTPS, so
-          -- disable the native backend only for the browser build.
-          local is_web = false
-          if love.system and love.system.getOS then
-              is_web = love.system.getOS() == "Web"
-          end
-
-          if is_web then
-              HTTPS_AVAILABLE = false
-              https = {}
-          elseif major >= 12 then
-              ---@diagnostic disable-next-line: lowercase-global
-              https = require("https")
-              HTTPS_AVAILABLE = true
-          else
-              ---@diagnostic disable-next-line: lowercase-global, different-requires
-              https = require("src.lib.https")
-          end'''
+          new_https = '''-- Browser build: native HTTPS uses LuaJIT FFI and cannot load in love.js.
+          HTTPS_AVAILABLE = false
+          https = {}'''
 
           if old_https not in text:
               raise SystemExit("Could not find Kristal HTTPS bootstrap")
@@ -135,43 +112,57 @@ jobs:
           test -s site/love.wasm
           test "$(wc -c < site/game.data)" -gt 1000000
           echo "Packaged game.data size: $(wc -c < site/game.data) bytes"
-          echo "Using 256 MiB WebAssembly heap for Kristal startup."
           python3 - <<'PY'
           from pathlib import Path
+
           p = Path("site/index.html")
           s = p.read_text()
-          old = "printErr: console.error.bind(console),"
-          new = """printErr: (function() {
+
+          overlay = '''<div id="runtimeError" style="display:none;position:fixed;inset:0;box-sizing:border-box;padding:16px;background:#080808;color:#ff8080;z-index:999999;overflow:auto;font:14px/1.45 monospace;white-space:pre-wrap"><b>ROARING KNIGHT — BROWSER ERROR</b>\n\n<span id="runtimeErrorText"></span></div>'''
+          needle = '<div>\n<h1>{{title}}</h1>'
+          if 'id="runtimeError"' not in s:
+              if needle not in s:
+                  raise SystemExit("love.js HTML template marker not found")
+              s = s.replace(needle, needle + "\n" + overlay, 1)
+
+          old_print = "printErr: console.error.bind(console),"
+          new_print = '''printErr: (function() {
               return function(message) {
                   console.error(message);
                   var box = document.getElementById('runtimeError');
-                  if (box) {
+                  var text = document.getElementById('runtimeErrorText');
+                  if (box && text) {
                       box.style.display = 'block';
-                      box.textContent += String(message) + "\\n";
+                      text.textContent += String(message) + "\\n";
                   }
               };
-          })(),"""
-          if old not in s:
+          })(),'''
+          if old_print not in s:
               raise SystemExit("love.js printErr hook not found")
-          s = s.replace(old, new, 1)
-          s = s.replace(
-              '<div>\n<h1>{{title}}</h1>',
-              '<div>\n<h1>{{title}}</h1>\n<div id="runtimeError" style="display:none;position:fixed;left:10px;right:10px;bottom:10px;max-height:45vh;overflow:auto;background:#111;color:#ff8080;border:2px solid #f44;padding:12px;text-align:left;white-space:pre-wrap;font:14px monospace;z-index:99999"></div>',
-              1
-          )
-          old_error = "window.onerror = function(event) {"
-          new_error = """window.onerror = function(event, source, lineno, colno, error) {
+          s = s.replace(old_print, new_print, 1)
+
+          old_error = '''window.onerror = function(event) {
+          // TODO: do not warn on ok events like simulating an infinite loop or exitStatus
+          Module.setStatus('Exception thrown, see JavaScript console');
+          Module.setStatus = function(text) {
+          if (text) Module.printErr('[post-exception status] ' + text);
+          };
+          };'''
+          new_error = '''window.onerror = function(event, source, lineno, colno, error) {
               var box = document.getElementById('runtimeError');
-              if (box) {
+              var text = document.getElementById('runtimeErrorText');
+              if (box && text) {
                   box.style.display = 'block';
-                  box.textContent += "JS ERROR: " + String(event) + "\\n";
-                  if (source) box.textContent += source + ":" + lineno + ":" + colno + "\\n";
-                  if (error && error.stack) box.textContent += error.stack + "\\n";
+                  text.textContent += "JS ERROR: " + String(event) + "\\n";
+                  if (source) text.textContent += source + ":" + lineno + ":" + colno + "\\n";
+                  if (error && error.stack) text.textContent += error.stack + "\\n";
               }
-"""
+              console.error(event, source, lineno, colno, error);
+          };'''
           if old_error not in s:
-              raise SystemExit("love.js window.onerror hook not found")
+              raise SystemExit("love.js error handler not found")
           s = s.replace(old_error, new_error, 1)
+
           p.write_text(s)
           PY
 
