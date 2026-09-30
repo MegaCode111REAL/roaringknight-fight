@@ -112,19 +112,23 @@ jobs:
           zip -9 -r ../roaringknight.love . -x '.git/*'
           cd ..
 
-      - name: Install LÖVE.js 11.5 compatibility builder
-        run: npm install --global github:Davidobot/love.js
+      - name: Checkout LÖVE.js 11.5 builder
+        uses: actions/checkout@v4
+        with:
+          repository: Davidobot/love.js
+          ref: master
+          path: lovejs
 
-      - name: Diagnose and build the GitHub Pages site with LÖVE 11.5 compatibility mode
+      - name: Install LÖVE.js builder dependencies
+        run: |
+          cd lovejs
+          npm install --omit=dev
+
+      - name: Build the GitHub Pages site with LÖVE 11.5 compatibility mode
         run: |
           set -euxo pipefail
-          node --version
-          npm --version
-          npx love.js --version
-          npx love.js --help
-          ls -lh roaringknight.love
           rm -rf site
-          npx love.js -c -m 67108864 -t "Roaring Knight Fight" roaringknight.love site
+          node lovejs/index.js -c -m 67108864 -t "Roaring Knight Fight" roaringknight.love site
 
           test -f site/index.html
           test -f site/game.js
