@@ -1,0 +1,90 @@
+name: Build and Deploy Roaring Knight to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+        with:
+          path: project
+
+      - name: Checkout Kristal
+        uses: actions/checkout@v4
+        with:
+          repository: KristalTeam/Kristal
+          ref: main
+          path: kristal
+
+      - name: Install build tools
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install zip
+        run: sudo apt-get update && sudo apt-get install -y zip
+
+      - name: Install love.js
+        run: npm install --global love.js
+
+      - name: Add the real Roaring Knight project to Kristal
+        run: |
+          rm -rf kristal/mods/*
+          cp -a project/. kristal/mods/roaringknight_proj/
+          rm -rf kristal/mods/roaringknight_proj/.git
+          rm -rf kristal/mods/roaringknight_proj/.github
+
+      - name: Configure Kristal for the real project
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("kristal/src/engine/vendcust.lua")
+          s = p.read_text()
+          s = s.replace('TARGET_MOD = nil', 'TARGET_MOD = "roaringknight_proj"')
+          s = s.replace('AUTO_MOD_START = false', 'AUTO_MOD_START = true')
+          p.write_text(s)
+          PY
+
+      - name: Package the real Kristal engine and project
+        run: |
+          cd kristal
+          zip -9 -r ../roaringknight.love . -x '.git/*'
+          cd ..
+
+      - name: Export the real Kristal build for the browser
+        run: |
+          rm -rf site
+          npx love.js roaringknight.love site -c -t "Roaring Knight Fight"
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
