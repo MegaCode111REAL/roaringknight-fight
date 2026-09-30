@@ -118,11 +118,11 @@ jobs:
       - name: Build the GitHub Pages site with LÖVE 11.5 compatibility mode
         run: |
           rm -rf site
-          npx love.js roaringknight.love site -c -m 67108864 -t "Roaring Knight Fight"
+          npx love.js -c -m 67108864 -t "Roaring Knight Fight" roaringknight.love site
 
           test -f site/index.html
+          test -f site/game.js
           test -f site/love.js
-          test -f site/love.wasm
           test -f site/roaringknight.love
 
 
