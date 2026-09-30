@@ -112,29 +112,64 @@ jobs:
           zip -9 -r ../roaringknight.love . -x '.git/*'
           cd ..
 
-      - name: Checkout LÖVE.js 11.5 builder
+      - name: Checkout LÖVE.js 11.5 runtime
         uses: actions/checkout@v4
         with:
           repository: Davidobot/love.js
           ref: master
           path: lovejs
 
-      - name: Install LÖVE.js builder dependencies
-        run: |
-          cd lovejs
-          npm install --omit=dev
-
-      - name: Build the GitHub Pages site with LÖVE 11.5 compatibility mode
+      - name: Build the GitHub Pages site with the real Kristal game
         run: |
           set -euxo pipefail
           rm -rf site
-          node lovejs/index.js -c -m 67108864 -t "Roaring Knight Fight" roaringknight.love site
+          mkdir -p site
+          cp lovejs/src/compat/love.js site/love.js
+          cp lovejs/src/compat/love.wasm site/love.wasm
+          cp -a lovejs/src/compat/theme site/theme
 
-          test -f site/index.html
-          test -f site/game.js
-          test -f site/love.js
-          test -f site/roaringknight.love
+          python3 - <<'PY'
+          import json
+          import uuid
+          from pathlib import Path
 
+          game_path = Path("roaringknight.love")
+          size = game_path.stat().st_size
+
+          metadata = {
+              "package_uuid": str(uuid.uuid4()),
+              "remote_package_size": size,
+              "files": [{
+                  "filename": "/game.love",
+                  "crunched": 0,
+                  "start": 0,
+                  "end": size,
+                  "audio": False,
+              }],
+          }
+
+          template = Path("lovejs/src/game.js").read_text()
+          game_js = template.replace("{{{create_file_paths}}}", "")
+          game_js = game_js.replace(
+              "{{{metadata}}}",
+              json.dumps(metadata, separators=(",", ":"))
+          )
+          Path("site/game.js").write_text(game_js)
+
+          index = Path("lovejs/src/compat/index.html").read_text()
+          index = index.replace("{{title}}", "Roaring Knight Fight")
+          index = index.replace("{{{arguments}}}", json.dumps(["./game.love"]))
+          index = index.replace("{{memory}}", "67108864")
+          Path("site/index.html").write_text(index)
+
+          game_path.replace("site/game.data")
+          PY
+
+          test -s site/index.html
+          test -s site/game.js
+          test -s site/game.data
+          test -s site/love.js
+          test -s site/love.wasm
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
