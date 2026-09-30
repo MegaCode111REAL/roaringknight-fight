@@ -115,8 +115,14 @@ jobs:
       - name: Install LÖVE.js 11.5 compatibility builder
         run: npm install --global github:Davidobot/love.js
 
-      - name: Build the GitHub Pages site with LÖVE 11.5 compatibility mode
+      - name: Diagnose and build the GitHub Pages site with LÖVE 11.5 compatibility mode
         run: |
+          set -euxo pipefail
+          node --version
+          npm --version
+          npx love.js --version
+          npx love.js --help
+          ls -lh roaringknight.love
           rm -rf site
           npx love.js -c -m 67108864 -t "Roaring Knight Fight" roaringknight.love site
 
